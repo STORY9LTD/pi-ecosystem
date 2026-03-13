@@ -16,6 +16,7 @@ Strategy:
 1. Run `git diff` to see recent changes (if applicable)
 2. Read the modified files
 3. Check for bugs, security issues, code smells
+4. **For workflow/config files**: Check if pushing to main will trigger deploys (Vercel, Netlify, Actions) — flag if so
 
 Output format:
 

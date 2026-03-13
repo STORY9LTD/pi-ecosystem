@@ -23,6 +23,7 @@ Strategy:
 2. Read key sections (not entire files)
 3. Identify types, interfaces, key functions
 4. Note dependencies between files
+5. **For integrations/infra**: Discover auth mechanism (API keys? OAuth? File-based? Env vars?) — check auth.json, .env, config files
 
 Output format:
 

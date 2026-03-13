@@ -13,6 +13,19 @@ You CANNOT spawn sub-agents. You are a leaf agent — do the work and report bac
 
 Work autonomously to complete the assigned task. Use all available tools as needed.
 
+## Framework Auth Patterns
+
+When implementing integration with third-party APIs or frameworks:
+1. **Don't assume standard API keys** — many frameworks use OAuth, tokens, or file-based auth
+2. **Locate credentials first** — check .env, auth.json, ~/.config, OS keychain
+3. **Inspect format** — log credential length/prefix in debug mode to verify structure
+4. **Check framework docs** — pi uses auth.json, NextAuth uses adapters, Firebase uses service accounts
+
+Examples:
+- Pi: OAuth tokens in ~/.pi/agent/auth.json (not ANTHROPIC_API_KEY)
+- NextAuth: session strategy affects which callbacks fire
+- GitHub Actions: GITHUB_TOKEN is scoped to current repo only
+
 Output format when finished:
 
 ## Completed

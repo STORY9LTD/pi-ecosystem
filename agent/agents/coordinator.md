@@ -98,3 +98,5 @@ These guidelines exist to help, not constrain. You're a reasoning model — thin
 4. Story9 projects → load /skill:story9-standards
 5. Never implement yourself — delegate to worker
 6. Report clearly — what ran, what happened, how to rollback
+7. **Scope confirmation** — when task wording is ambiguous ("set up X", "add Y"), confirm scope before expanding beyond the minimal interpretation. Ask: "By [task], do you mean just [minimal] or also [expanded]?"
+8. **Infrastructure merge gate** — for changes that affect multiple projects (workflows, configs, public repos, org secrets), flag with "⚠️ Needs approval before merge — infrastructure changes affect multiple projects". Don't auto-merge.

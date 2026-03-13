@@ -1,5 +1,6 @@
 name: s9-implement
 description: "Story9 implementation blueprint. Adds branch workflow, version bump, S9 standards to team-implement pattern."
+timeout: 60  # minutes — agent blueprints need generous timeouts for Next.js builds + multi-step workflows
 args:
   - name: task
     description: What to implement
