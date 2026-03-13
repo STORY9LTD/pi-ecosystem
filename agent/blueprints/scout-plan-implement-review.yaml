@@ -1,0 +1,76 @@
+name: scout-plan-implement-review
+description: "Full Stripe-style pipeline: scout → plan → implement → lint → test → review → fix"
+args:
+  - name: task
+    description: What to build
+    required: true
+
+steps:
+  # Agent: fast recon
+  - name: scout
+    type: agent
+    agent: scout
+    task: "Find all code relevant to: {args.task}"
+
+  # Agent: create plan
+  - name: plan
+    type: agent
+    agent: planner
+    task: |
+      Create an implementation plan for: {args.task}
+
+      Context from scout:
+      {step.scout.output}
+
+  # Agent: implement the plan
+  - name: implement
+    type: agent
+    agent: worker
+    task: |
+      Implement this plan exactly:
+      {step.plan.output}
+
+      Do NOT commit. Do NOT deviate from the plan.
+
+  # Deterministic: lint
+  - name: lint
+    type: code
+    command: npm run lint 2>&1 || true
+
+  # Deterministic: typecheck
+  - name: typecheck
+    type: code
+    command: npx tsc --noEmit 2>&1 || true
+
+  # Deterministic: test
+  - name: test
+    type: code
+    command: npm test 2>&1 || true
+
+  # Agent: fix any failures
+  - name: fix-all
+    type: agent
+    agent: worker
+    task: |
+      Fix ALL errors below. Do NOT change functionality or test expectations.
+      Lint: {step.lint.output}
+      Typecheck: {step.typecheck.output}
+      Tests: {step.test.output}
+    skip_unless: step.lint.failed || step.typecheck.failed || step.test.failed
+
+  # Deterministic: verify clean
+  - name: verify
+    type: code
+    command: |
+      echo "=== Lint ===" && (npm run lint 2>&1 || true)
+      echo "=== Types ===" && (npx tsc --noEmit 2>&1 || true)
+      echo "=== Tests ===" && (npm test 2>&1 || true)
+
+  # Agent: final review
+  - name: review
+    type: agent
+    agent: reviewer
+    task: |
+      Review all uncommitted changes.
+      Task: {args.task}
+      Plan: {step.plan.output}

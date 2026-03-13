@@ -1,0 +1,158 @@
+name: s9-implement
+description: "Story9 implementation blueprint. Adds branch workflow, version bump, S9 standards to team-implement pattern."
+args:
+  - name: task
+    description: What to implement
+    required: true
+  - name: branch
+    description: Git branch name
+    default: feature/auto
+
+steps:
+  # ── SAFETY ──────────────────────────────────────────
+  - name: checkpoint
+    type: code
+    command: |
+      git stash push -m "pre-team-$(date +%s)" --include-untracked 2>/dev/null || true
+      git checkout -b {args.branch} 2>/dev/null || git checkout {args.branch} 2>/dev/null || true
+      echo "Branch: $(git branch --show-current)"
+      echo "Checkpoint: $(git rev-parse --short HEAD)"
+    allow_fail: true
+
+  # ── S9 CONTEXT ─────────────────────────────────────
+  - name: s9-context
+    type: code
+    command: |
+      echo "=== CLAUDE.md ===" && cat CLAUDE.md 2>/dev/null || echo "No CLAUDE.md"
+      echo "=== Version ===" && cat lib/version.ts 2>/dev/null || echo "No version file"
+      echo "=== Package ===" && cat package.json | head -20 2>/dev/null || echo "No package.json"
+
+  # ── UNDERSTAND ──────────────────────────────────────
+  - name: scout
+    type: agent
+    agent: scout
+    task: |
+      Find all code relevant to: {args.task}
+      This is a Story9 project. Key conventions: Next.js 14 App Router, Tailwind with S9 brand colours, Airtable backend, collapsible sidebar nav, SWR for state.
+      Project context: {step.s9-context.output}
+      Be thorough — your output is the only context the planner and worker will have.
+
+  # ── PLAN ────────────────────────────────────────────
+  - name: plan
+    type: agent
+    agent: planner
+    task: |
+      Create an implementation plan for: {args.task}
+      This is a Story9 project — follow S9 standards (Next.js 14, Tailwind S9 colours, Airtable, SWR, sidebar nav).
+      Context from scout:
+      {step.scout.output}
+      Make the plan concrete and specific. Include version bump in lib/version.ts.
+
+  # ── BUILD ───────────────────────────────────────────
+  - name: implement
+    type: agent
+    agent: worker
+    task: |
+      Follow this plan exactly:
+      {step.plan.output}
+
+      Scout context:
+      {step.scout.output}
+
+      Story9 rules:
+      - Use Tailwind with S9 brand colours (navy #162945, teal buttons, coral cancel)
+      - Use SWR for data fetching
+      - Bump version in lib/version.ts
+      - Collapsible sidebar nav (not top navbar)
+      Do NOT commit.
+
+  # ── VALIDATE ────────────────────────────────────────
+  - name: lint
+    type: code
+    command: npm run lint 2>&1 || echo "No linter"
+    allow_fail: true
+
+  - name: typecheck
+    type: code
+    command: npx tsc --noEmit 2>&1 || echo "No TypeScript"
+    allow_fail: true
+
+  - name: test
+    type: code
+    command: npm test 2>&1 || echo "No tests"
+    allow_fail: true
+
+  # ── FIX ─────────────────────────────────────────────
+  - name: fix-validation
+    type: agent
+    agent: worker
+    task: |
+      Fix ONLY errors below. Do NOT change functionality.
+      Task: {args.task}
+      Lint: {step.lint.output}
+      Typecheck: {step.typecheck.output}
+      Tests: {step.test.output}
+    skip_unless: step.lint.failed || step.typecheck.failed || step.test.failed
+
+  # ── RE-VALIDATE ────────────────────────────────────
+  - name: revalidate
+    type: code
+    command: |
+      echo "=== Lint ===" && (npm run lint 2>&1 || true)
+      echo "=== Types ===" && (npx tsc --noEmit 2>&1 || true)
+      echo "=== Tests ===" && (npm test 2>&1 || true)
+
+  # ── REVIEW ─────────────────────────────────────────
+  - name: review
+    type: agent
+    agent: reviewer
+    task: |
+      Review all uncommitted changes for: {args.task}
+      This is a Story9 project. Also check:
+      - Version bumped in lib/version.ts?
+      - S9 brand colours used correctly?
+      - SWR for data fetching?
+      - No top navbar (sidebar only)?
+      Plan was: {step.plan.output}
+      Validation: {step.revalidate.output}
+
+  # ── REVIEW GATE ────────────────────────────────────
+  - name: review-gate
+    type: gate
+    condition: "!step.review.output.includes('Critical')"
+    on_fail: fix-review
+
+  - name: fix-review
+    type: agent
+    agent: worker
+    task: |
+      Fix ONLY Critical issues from this review:
+      {step.review.output}
+      Task: {args.task}
+    skip_unless: step.review-gate.failed
+
+  # ── FINAL VALIDATION ──────────────────────────────
+  - name: final-check
+    type: code
+    command: |
+      echo "=== Lint ===" && (npm run lint 2>&1 || true)
+      echo "=== Types ===" && (npx tsc --noEmit 2>&1 || true)
+
+  # ── VERSION CHECK ──────────────────────────────────
+  - name: version-check
+    type: code
+    command: |
+      if git diff --name-only | grep -q "lib/version.ts"; then
+        echo "✓ Version bumped"
+      else
+        echo "✗ WARNING: Version not bumped in lib/version.ts"
+      fi
+
+  # ── COMMIT + PUSH ─────────────────────────────────
+  - name: commit
+    type: code
+    command: |
+      git add -A
+      git commit -m "feat: {args.task}"
+      git push origin {args.branch} 2>&1
+    allow_fail: true

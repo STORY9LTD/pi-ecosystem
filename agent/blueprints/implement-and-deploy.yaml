@@ -1,0 +1,78 @@
+name: implement-and-deploy
+description: "Full cycle: implement → lint → typecheck → test → review → commit → push → PR"
+args:
+  - name: task
+    description: What to implement
+    required: true
+  - name: branch
+    description: Git branch name
+    default: feature/auto
+
+steps:
+  - name: create-branch
+    type: code
+    command: git checkout -b {args.branch} 2>&1
+    allow_fail: true
+
+  - name: implement
+    type: agent
+    agent: worker
+    task: |
+      Implement the following task:
+      {args.task}
+
+      Follow all project conventions. Do NOT commit.
+
+  - name: lint
+    type: code
+    command: npm run lint 2>&1 || npx eslint . 2>&1 || echo "No linter configured"
+    allow_fail: true
+
+  - name: typecheck
+    type: code
+    command: npx tsc --noEmit 2>&1 || echo "No TypeScript configured"
+    allow_fail: true
+
+  - name: fix-errors
+    type: agent
+    agent: worker
+    task: |
+      Fix any lint or type errors below. Do NOT change functionality.
+      Lint output: {step.lint.output}
+      Typecheck output: {step.typecheck.output}
+    skip_unless: step.lint.failed || step.typecheck.failed
+
+  - name: test
+    type: code
+    command: npm test 2>&1 || echo "No tests configured"
+    allow_fail: true
+
+  - name: fix-tests
+    type: agent
+    agent: worker
+    task: |
+      Fix these test failures without changing test expectations:
+      {step.test.output}
+    skip_unless: step.test.failed
+
+  - name: review
+    type: agent
+    agent: reviewer
+    task: |
+      Review all uncommitted changes.
+      Context: {args.task}
+
+  - name: commit
+    type: code
+    command: |
+      git add -A
+      git commit -m "feat: {args.task}"
+
+  - name: push
+    type: code
+    command: git push origin {args.branch} 2>&1
+
+  - name: create-pr
+    type: code
+    command: gh pr create --title "feat: {args.task}" --body "Automated by blueprint engine" --head {args.branch} 2>&1
+    allow_fail: true

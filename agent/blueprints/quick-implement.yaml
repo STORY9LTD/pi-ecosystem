@@ -1,0 +1,43 @@
+name: quick-implement
+description: "Fast implementation with validation: implement → lint → typecheck → fix"
+args:
+  - name: task
+    description: What to implement
+    required: true
+
+steps:
+  - name: scout
+    type: agent
+    agent: scout
+    task: "Find all code relevant to: {args.task}"
+
+  - name: implement
+    type: agent
+    agent: worker
+    task: |
+      Context from scout:
+      {step.scout.output}
+
+      Implement: {args.task}
+      Do NOT commit.
+
+  - name: lint
+    type: code
+    command: npm run lint 2>&1 || true
+
+  - name: typecheck
+    type: code
+    command: npx tsc --noEmit 2>&1 || true
+
+  - name: fix-errors
+    type: agent
+    agent: worker
+    task: |
+      Fix ONLY errors below. Do NOT change functionality.
+      Lint: {step.lint.output}
+      Typecheck: {step.typecheck.output}
+    skip_unless: step.lint.failed || step.typecheck.failed
+
+  - name: verify
+    type: code
+    command: npx tsc --noEmit 2>&1 && echo "✓ All clear"

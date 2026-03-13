@@ -1,0 +1,55 @@
+name: full-audit
+description: "Full security + code quality audit: security scan → code audit → combined report"
+args:
+  - name: project
+    description: Project name or description
+    default: "current project"
+
+steps:
+  - name: security-scan
+    type: agent
+    agent: auditor
+    task: |
+      Run a SECURITY audit only (follow /skill:security-audit procedure).
+      Project: {args.project}
+      
+      Check all 8 sections: secrets, auth, injection, dependencies, 
+      API security, Vercel config, data protection, file security.
+
+  - name: code-quality
+    type: agent
+    agent: auditor
+    task: |
+      Run a CODE QUALITY audit only (follow /skill:code-audit procedure).
+      Project: {args.project}
+      
+      Check all 8 sections: playbook compliance, TypeScript, components,
+      API routes, performance, dead code, tests, best practices.
+
+  - name: dep-check
+    type: code
+    command: npm audit 2>&1 || echo "npm audit not available"
+
+  - name: type-check
+    type: code
+    command: npx tsc --noEmit 2>&1 || echo "TypeScript not configured"
+
+  - name: combined-report
+    type: agent
+    agent: auditor
+    task: |
+      Combine these results into a single audit report:
+      
+      Security findings:
+      {step.security-scan.output}
+      
+      Code quality findings:
+      {step.code-quality.output}
+      
+      Dependency audit:
+      {step.dep-check.output}
+      
+      TypeScript check:
+      {step.type-check.output}
+      
+      Produce the final combined report with overall risk level and top 3 priorities.

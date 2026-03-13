@@ -1,0 +1,135 @@
+name: team-implement
+description: "The default blueprint. Scout → plan → implement with team iteration → validate → commit. Combines blueprint structure with team quality."
+args:
+  - name: task
+    description: What to implement
+    required: true
+
+steps:
+  # ── SAFETY ──────────────────────────────────────────
+  - name: checkpoint
+    type: code
+    command: |
+      git stash push -m "pre-team-$(date +%s)" --include-untracked 2>/dev/null || true
+      echo "Checkpoint: $(git rev-parse --short HEAD 2>/dev/null || echo 'no git')"
+    allow_fail: true
+
+  # ── UNDERSTAND ──────────────────────────────────────
+  - name: scout
+    type: agent
+    agent: scout
+    task: |
+      Find all code relevant to: {args.task}
+      Be thorough — your output is the only context the planner and worker will have.
+
+  # ── PLAN ────────────────────────────────────────────
+  - name: plan
+    type: agent
+    agent: planner
+    task: |
+      Create an implementation plan for: {args.task}
+
+      Context from scout:
+      {step.scout.output}
+
+      Make the plan concrete and specific. The worker will follow it step by step.
+
+  # ── BUILD (round 1) ────────────────────────────────
+  - name: implement
+    type: agent
+    agent: worker
+    task: |
+      Follow this plan exactly:
+      {step.plan.output}
+
+      Scout context:
+      {step.scout.output}
+
+      Do NOT commit. Do NOT deviate from the plan unless the plan has a clear error.
+
+  # ── VALIDATE (round 1) ─────────────────────────────
+  - name: lint
+    type: code
+    command: npm run lint 2>&1 || echo "No linter configured"
+    allow_fail: true
+
+  - name: typecheck
+    type: code
+    command: npx tsc --noEmit 2>&1 || echo "No TypeScript configured"
+    allow_fail: true
+
+  - name: test
+    type: code
+    command: npm test 2>&1 || echo "No tests configured"
+    allow_fail: true
+
+  # ── FIX (if validation failed) ─────────────────────
+  - name: fix-validation
+    type: agent
+    agent: worker
+    task: |
+      Fix ONLY the errors below. Do NOT change functionality or test expectations.
+      Original task: {args.task}
+      Lint: {step.lint.output}
+      Typecheck: {step.typecheck.output}
+      Tests: {step.test.output}
+    skip_unless: step.lint.failed || step.typecheck.failed || step.test.failed
+
+  # ── RE-VALIDATE ────────────────────────────────────
+  - name: revalidate
+    type: code
+    command: |
+      echo "=== Lint ===" && (npm run lint 2>&1 || true)
+      echo "=== Types ===" && (npx tsc --noEmit 2>&1 || true)
+      echo "=== Tests ===" && (npm test 2>&1 || true)
+
+  # ── REVIEW ─────────────────────────────────────────
+  - name: review
+    type: agent
+    agent: reviewer
+    task: |
+      Review all uncommitted changes for: {args.task}
+      Plan was: {step.plan.output}
+      Validation: {step.revalidate.output}
+
+      Focus on: correctness, security, maintainability.
+      Mark Critical issues (must fix) vs Suggestions (nice to have).
+
+  # ── REVIEW GATE ────────────────────────────────────
+  - name: review-gate
+    type: gate
+    condition: "!step.review.output.includes('Critical')"
+    on_fail: fix-review
+
+  # ── FIX REVIEW ISSUES (round 2) ───────────────────
+  - name: fix-review
+    type: agent
+    agent: worker
+    task: |
+      Fix ONLY the Critical issues from this review. Ignore Suggestions for now.
+      Original task: {args.task}
+      Review findings:
+      {step.review.output}
+    skip_unless: step.review-gate.failed
+
+  # ── FINAL VALIDATION ──────────────────────────────
+  - name: final-check
+    type: code
+    command: |
+      echo "=== Lint ===" && (npm run lint 2>&1 || true)
+      echo "=== Types ===" && (npx tsc --noEmit 2>&1 || true)
+      echo "=== Tests ===" && (npm test 2>&1 || true)
+
+  # ── RE-REVIEW (if fixes were made) ────────────────
+  - name: re-review
+    type: agent
+    agent: reviewer
+    task: |
+      Quick re-review after fixes. Original review found Critical issues.
+      Check that fixes are correct and haven't introduced regressions.
+      Task: {args.task}
+      Original review: {step.review.output}
+      Validation: {step.final-check.output}
+
+      Only flag Critical issues. We're looking for correctness, not polish.
+    skip_unless: step.review-gate.failed

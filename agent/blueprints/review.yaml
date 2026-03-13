@@ -1,0 +1,19 @@
+name: review
+description: "Review uncommitted changes with diff context"
+args:
+  - name: context
+    description: What the changes are about
+    default: "recent changes"
+
+steps:
+  - name: diff
+    type: code
+    command: git diff --stat && echo "---FULL DIFF---" && git diff
+
+  - name: review
+    type: agent
+    agent: reviewer
+    task: |
+      Review these changes. Context: {args.context}
+
+      {step.diff.output}
